@@ -7,20 +7,18 @@ from langchain.memory import ConversationBufferMemory
 
 class NeuroCoreEngine:
     def __init__(self, api_key):
-        # Initialize Groq LLM
+        # Naya model "llama-3.3-70b-versatile" use kar rahe hain
         self.llm = ChatGroq(
             temperature=0.3, 
             groq_api_key=api_key, 
-            model_name="llama3-70b-8192"
+            model_name="llama-3.3-70b-versatile"
         )
         
-        # Tools setup (Sirf wahi jo requirements mein hain)
         self.search = DuckDuckGoSearchRun()
         self.wiki = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
         
         self.tools = [self.search, self.wiki]
         
-        # Memory setup
         self.memory = ConversationBufferMemory(
             memory_key="chat_history", 
             return_messages=True
