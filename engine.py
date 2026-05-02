@@ -1,20 +1,14 @@
 import base64
 from io import BytesIO
-from langchain_groq import ChatGroq
-from langchain.agents import initialize_agent, AgentType
-from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
-from langchain_community.utilities import WikipediaAPIWrapper
-from langchain.memory import ConversationBufferMemory
 from groq import Groq
+from langchain_groq import ChatGroq
+from langchain.memory import ConversationBufferMemory
 
 class NeuroCoreEngine:
     def __init__(self, api_key):
         self.api_key = api_key
         self.client = Groq(api_key=api_key)
         self.text_llm = ChatGroq(temperature=0.3, groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
-        self.search = DuckDuckGoSearchRun()
-        self.wiki = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
-        self.tools = [self.search, self.wiki]
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
     def process_image(self, image_data, prompt):
@@ -23,11 +17,13 @@ class NeuroCoreEngine:
             image_data.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
-            # STABLE MODEL: llama-3.2-11b-vision-preview
+            # Using the ONLY stable vision model name on Groq currently
             completion = self.client.chat.completions.create(
                 model="llama-3.2-11b-vision-preview",
-                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}]}],
-                temperature=0.5
+                messages=[{"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}
+                ]}]
             )
             return completion.choices[0].message.content
         except Exception as e:
@@ -35,7 +31,7 @@ class NeuroCoreEngine:
 
     def process_query(self, user_input):
         try:
-            agent = initialize_agent(self.tools, self.text_llm, agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, verbose=True, memory=self.memory, handle_parsing_errors=True)
-            return agent.run(input=f"System: You are HARIS NEURO-CORE. {user_input}")
+            # Direct invoke for faster response without agent loops
+            return self.text_llm.invoke(user_input).content
         except Exception as e:
             return f"Neural Error: {str(e)}"
