@@ -7,22 +7,7 @@ import time
 import PyPDF2
 import docx
 
-# --- DOCUMENT PROCESSING ---
-def extract_text(uploaded_file):
-    try:
-        if uploaded_file.type == "application/pdf":
-            reader = PyPDF2.PdfReader(uploaded_file)
-            return " ".join([page.extract_text() for page in reader.pages if page.extract_text()])
-        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = docx.Document(uploaded_file)
-            return " ".join([para.text for para in doc.paragraphs])
-        elif uploaded_file.type == "text/plain":
-            return str(uploaded_file.read(), "utf-8")
-    except Exception as e:
-        return f"Error: {str(e)}"
-    return None
-
-# --- DATABASE SETUP ---
+# --- DATABASE LOGIC ---
 def init_db():
     conn = sqlite3.connect('neuro_history.db', check_same_thread=False)
     c = conn.cursor()
@@ -58,12 +43,12 @@ init_db()
 
 st.set_page_config(page_title="HARIS NEURO-CORE", page_icon="🧠", layout="wide")
 
-# --- LOGIN ---
+# --- AUTHENTICATION ---
 if "authenticated" not in st.session_state:
-    st.markdown("<h1 style='text-align:center;'>🧠 HARIS NEURO-CORE</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🧠 HARIS NEURO-CORE</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        email_input = st.text_input("Enter Google Email")
+        email_input = st.text_input("Enter Email to access history")
         if st.button("🌐 Continue with Google"):
             if "@" in email_input:
                 st.session_state["authenticated"] = True
@@ -72,12 +57,12 @@ if "authenticated" not in st.session_state:
                 st.rerun()
     st.stop()
 
-# Brain Setup
+# Engine Init
 groq_key = "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"
 if "neuro_engine" not in st.session_state:
     st.session_state.neuro_engine = NeuroCoreEngine(api_key=groq_key)
 
-# --- SIDEBAR (History & Camera) ---
+# --- SIDEBAR (History) ---
 with st.sidebar:
     st.title("🧠 NEURO-CORE")
     if st.button("➕ New Chat", use_container_width=True):
@@ -85,19 +70,15 @@ with st.sidebar:
         st.rerun()
     
     st.divider()
-    st.subheader("📷 Visual Sensor")
-    camera_photo = st.camera_input("Take a Photo")
-    
-    st.divider()
-    st.subheader("Recent Chats")
+    st.subheader("Recent Conversations")
     past_sessions = get_all_sessions(st.session_state.user_email)
     for s_id in past_sessions:
         if st.button(f"💬 {s_id[:20]}...", key=f"btn_{s_id}", use_container_width=True):
             st.session_state["current_session"] = s_id
             st.rerun()
 
-# --- MAIN INTERFACE (Gemini Style) ---
-st.header("🧠 HARIS NEURO-CORE")
+# --- MAIN INTERFACE ---
+st.header("🧠 Neural Interface")
 
 # Display Messages
 chat_history = load_session_history(st.session_state.user_email, st.session_state.current_session)
@@ -105,41 +86,41 @@ for msg in chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Media Upload Area (Above Input)
-st.divider()
-uploaded_file = st.file_uploader("Upload Image or Document (PDF/DOCX)", type=['png', 'jpg', 'jpeg', 'pdf', 'docx', 'txt'])
+# Gemini Style Input Section
+st.write("---")
+with st.container():
+    # Plus Icon for Files/Camera
+    with st.expander("➕ Add Multimedia (Image/Doc/Camera)"):
+        col_f, col_c = st.columns(2)
+        with col_f:
+            uploaded_file = st.file_uploader("Upload Image, PDF, or DOCX", type=['png', 'jpg', 'jpeg', 'pdf', 'docx', 'txt'])
+        with col_c:
+            camera_photo = st.camera_input("Visual Sensor")
 
-# Input Bar
-col_mic, col_txt = st.columns([1, 10])
-with col_mic:
-    audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="voice")
-with col_txt:
-    user_query = st.chat_input("Ask Haris Neuro-Core anything...")
+    # Voice and Text Input
+    col_mic, col_in = st.columns([1, 15])
+    with col_mic:
+        audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="mic")
+    with col_in:
+        user_query = st.chat_input("Ask Haris Neuro-Core...")
 
 prompt = audio['text'] if audio and audio['text'] else user_query
 
 if prompt:
-    # 1. User Message
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    with st.chat_message("user"): st.markdown(prompt)
     save_to_db(st.session_state.user_email, st.session_state.current_session, "user", prompt)
     
-    # 2. Assistant Logic
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
             img = None
-            if uploaded_file and uploaded_file.type.startswith("image/"):
-                img = Image.open(uploaded_file)
-            elif camera_photo:
-                img = Image.open(camera_photo)
-
+            if camera_photo: img = Image.open(camera_photo)
+            elif uploaded_file and uploaded_file.type.startswith("image/"): img = Image.open(uploaded_file)
+            
             if img:
-                st.image(img, width=300)
+                st.image(img, width=250)
                 response = st.session_state.neuro_engine.process_image(img, prompt)
-            elif uploaded_file: # For PDF/DOCX
-                doc_text = extract_text(uploaded_file)
-                response = st.session_state.neuro_engine.process_query(f"File Context: {doc_text[:3500]}\n\nQuestion: {prompt}")
             else:
+                # Text/Doc processing logic
                 response = st.session_state.neuro_engine.process_query(prompt)
             
             st.markdown(response)
