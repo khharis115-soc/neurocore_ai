@@ -49,6 +49,14 @@ def load_session_history(email, session_id):
     conn.close()
     return [{"role": r, "content": c} for r, c in data]
 
+def get_all_sessions(email):
+    conn = sqlite3.connect('neuro_history.db', check_same_thread=False)
+    c = conn.cursor()
+    c.execute("SELECT DISTINCT session_id FROM messages WHERE email=? ORDER BY timestamp DESC", (email,))
+    sessions = [row[0] for row in c.fetchall()]
+    conn.close()
+    return sessions
+
 def extract_doc_text(uploaded_file):
     try:
         if uploaded_file.type == "application/pdf":
@@ -63,7 +71,7 @@ def extract_doc_text(uploaded_file):
 init_db()
 st.set_page_config(page_title="HARIS NEURO-CORE", layout="wide")
 
-# --- LOGIN SYSTEM ---
+# --- AUTH & SESSION ---
 if "authenticated" not in st.session_state:
     st.title("🧠 HARIS NEURO-CORE")
     t1, t2 = st.tabs(["Login", "Sign Up"])
@@ -86,59 +94,80 @@ if "authenticated" not in st.session_state:
                 else: st.error(msg)
     st.stop()
 
+# Reset Trigger for Uploads
+if "reset_uploader" not in st.session_state:
+    st.session_state.reset_uploader = 0
+
 # --- ENGINE ---
 groq_key = "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"
 if "neuro_engine" not in st.session_state:
     st.session_state.neuro_engine = NeuroCoreEngine(api_key=groq_key)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (History) ---
 with st.sidebar:
     st.title("🧠 NEURO-CORE")
     if st.button("➕ New Chat", use_container_width=True):
         st.session_state.current_session = f"Chat_{int(time.time())}"
         st.rerun()
+    st.divider()
+    st.subheader("Recent History")
+    sessions = get_all_sessions(st.session_state.user_email)
+    for s in sessions:
+        if st.button(f"💬 {s[:20]}", key=s, use_container_width=True):
+            st.session_state.current_session = s
+            st.rerun()
+    st.divider()
     if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
 
-# --- MAIN CHAT ---
+# --- MAIN INTERFACE ---
 st.header("🧠 Neural Interface")
 history = load_session_history(st.session_state.user_email, st.session_state.current_session)
 for m in history:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# Plus Button Expander (Gemini Style)
-with st.expander("➕ Attach Multimedia / Take Photo"):
-    col1, col2 = st.columns(2)
-    up_file = col1.file_uploader("Upload File/Image", type=['png','jpg','jpeg','pdf','docx'], key="file_input")
-    cam_file = col2.camera_input("Visual Sensor", key="cam_input")
+# Bottom Input Section (Gemini Style)
+st.write("---")
+with st.container():
+    # Plus Menu for Multimedia
+    with st.expander("➕ Multimedia Options (Click to expand)"):
+        c1, c2 = st.columns(2)
+        # Unique key helps in resetting
+        up_file = c1.file_uploader("Attach File/Image", type=['png','jpg','jpeg','pdf','docx'], key=f"file_{st.session_state.reset_uploader}")
+        cam_file = c2.camera_input("Take Photo", key=f"cam_{st.session_state.reset_uploader}")
 
-# Input Bar
-col_m, col_i = st.columns([1, 15])
-with col_m: audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="voice")
-user_in = st.chat_input("Ask Haris Neuro-Core...")
+    # Input Bar with Mic
+    c_mic, c_input = st.columns([1, 15])
+    with c_mic: 
+        audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key=f"mic_{st.session_state.reset_uploader}")
+    
+    user_in = st.chat_input("Ask Haris Neuro-Core...")
 
 prompt = audio['text'] if audio and audio['text'] else user_in
 
 if prompt:
-    # Handle File & Camera Logic
     file_payload = cam_file if cam_file else up_file
     
     with st.chat_message("user"):
         st.markdown(prompt)
-        if file_payload: st.caption(f"Attached: {file_payload.name}")
+        if file_payload: st.caption(f"📎 Processed: {file_payload.name}")
     save_to_db(st.session_state.user_email, st.session_state.current_session, "user", prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Processing..."):
+        with st.spinner("Neural Processing..."):
             if file_payload and file_payload.type.startswith("image/"):
                 img = Image.open(file_payload)
                 response = st.session_state.neuro_engine.process_image(img, prompt)
-            elif file_payload: # Document
-                doc_text = extract_doc_text(file_payload)
-                response = st.session_state.neuro_engine.process_query(f"Context: {doc_text[:3000]}\n\nUser: {prompt}")
+            elif file_payload:
+                text = extract_doc_text(file_payload)
+                response = st.session_state.neuro_engine.process_query(f"File Context: {text[:3000]}\n\nQuestion: {prompt}")
             else:
                 response = st.session_state.neuro_engine.process_query(prompt)
             
             st.markdown(response)
             save_to_db(st.session_state.user_email, st.session_state.current_session, "assistant", response)
+    
+    # AUTO-RESET LOGIC: Update key to clear widgets
+    st.session_state.reset_uploader += 1
+    st.rerun()
