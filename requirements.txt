@@ -4,4 +4,4 @@ langchain-community
 duckduckgo-search
 wikipedia
 Pillow
-python-dotenv
+streamlit-mic-recorder
