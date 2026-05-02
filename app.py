@@ -4,7 +4,7 @@ from PIL import Image
 from streamlit_mic_recorder import mic_recorder
 import sqlite3, time, hashlib, PyPDF2, docx
 
-# --- DB SETUP ---
+# --- DB & AUTH (Same as before) ---
 def manage_db(query, params=(), fetch=False):
     conn = sqlite3.connect('neuro_history.db', check_same_thread=False)
     c = conn.cursor()
@@ -14,30 +14,26 @@ def manage_db(query, params=(), fetch=False):
     conn.close()
     return res
 
-# Create tables if not exist
 manage_db('CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, password TEXT)')
 manage_db('CREATE TABLE IF NOT EXISTS messages (email TEXT, session_id TEXT, role TEXT, content TEXT, timestamp REAL)')
 
 st.set_page_config(page_title="HARIS NEURO-CORE", layout="wide")
 
-# --- AUTH LOGIC ---
 if "authenticated" not in st.session_state:
     st.title("🧠 HARIS NEURO-CORE")
-    tab1, tab2 = st.tabs(["Login", "Sign Up"])
-    with tab1:
-        e = st.text_input("Email")
-        p = st.text_input("Password", type="password")
-        if st.button("Login"):
-            u = manage_db("SELECT * FROM users WHERE email=? AND password=?", (e, hashlib.sha256(p.encode()).hexdigest()), True)
-            if u:
-                st.session_state.update({"authenticated": True, "user_email": e, "current_session": f"Chat_{int(time.time())}", "reset_key": 0})
-                st.rerun()
-    if not st.session_state.get("authenticated"): st.stop()
+    e = st.text_input("Email")
+    p = st.text_input("Password", type="password")
+    if st.button("Login"):
+        u = manage_db("SELECT * FROM users WHERE email=? AND password=?", (e, hashlib.sha256(p.encode()).hexdigest()), True)
+        if u:
+            st.session_state.update({"authenticated": True, "user_email": e, "current_session": f"Chat_{int(time.time())}", "reset_key": 0})
+            st.rerun()
+    st.stop()
 
-# --- ENGINE & UI ---
 if "neuro_engine" not in st.session_state:
     st.session_state.neuro_engine = NeuroCoreEngine(api_key="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")
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("🧠 NEURO-CORE")
     if st.button("➕ New Chat", use_container_width=True):
@@ -54,58 +50,68 @@ with st.sidebar:
             manage_db("DELETE FROM messages WHERE session_id=?", (s[0],))
             st.rerun()
 
-# Display Chat
+# --- CHAT DISPLAY ---
 st.header("🧠 Neural Interface")
 history = manage_db("SELECT role, content FROM messages WHERE email=? AND session_id=? ORDER BY timestamp", (st.session_state.user_email, st.session_state.current_session), True)
 for r, c in history:
     with st.chat_message(r): st.markdown(c)
 
-# --- INPUT AREA (GEMINI STYLE) ---
+# --- WHATSAPP STYLE INPUT ---
+st.divider()
 with st.container():
-    with st.expander("📎 Attach Files (PDF, DOCX, Images)"):
+    # File Uploader (Hidden in expander to keep it clean)
+    with st.expander("📎 Attach File/Image"):
         up_file = st.file_uploader("Upload", type=['png','jpg','jpeg','pdf','docx','txt'], key=f"file_{st.session_state.reset_key}")
     
-    c_mic, c_in = st.columns([1, 15])
-    with c_mic:
-        audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key=f"mic_{st.session_state.reset_key}")
+    # Input Row: Mic and Text
+    col_mic, col_in = st.columns([2, 10])
     
-    user_msg = st.chat_input("Ask anything...")
+    with col_mic:
+        # WhatsApp Style: Button dabao, baat karo, aur chhor do
+        audio = mic_recorder(
+            start_prompt="🎤 Start Recording", 
+            stop_prompt="🛑 Send Audio", 
+            key=f"mic_{st.session_state.reset_key}"
+        )
+    
+    with col_in:
+        user_msg = st.chat_input("Type your message here...")
 
-# Process Input
+# --- LOGIC: WHAT DID YOU SAY? ---
 final_input = None
-if audio and isinstance(audio, dict) and audio.get('text'):
-    final_input = audio['text']
+if audio and audio.get('text'):
+    final_input = audio['text'] # Jo aapne mic mein bola wo text ban kar yahan aayega
 elif user_msg:
     final_input = user_msg
 
 if final_input:
-    # Save & Show User Message
+    # 1. Save User Speech/Text
     with st.chat_message("user"):
         st.markdown(final_input)
     manage_db("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (st.session_state.user_email, st.session_state.current_session, "user", final_input, time.time()))
 
+    # 2. AI Response
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Haris Neuro-Core is listening..."):
             if up_file:
                 if up_file.type.startswith("image/"):
                     response = st.session_state.neuro_engine.process_image(Image.open(up_file), final_input)
                 else:
-                    # Document extraction
-                    text = ""
+                    # Document handling
+                    doc_text = ""
                     if up_file.name.endswith('.pdf'):
                         reader = PyPDF2.PdfReader(up_file)
-                        text = " ".join([p.extract_text() for p in reader.pages])
+                        doc_text = " ".join([p.extract_text() for p in reader.pages])
                     elif up_file.name.endswith('.docx'):
                         doc = docx.Document(up_file)
-                        text = " ".join([p.text for p in doc.paragraphs])
-                    else:
-                        text = up_file.read().decode()
-                    response = st.session_state.neuro_engine.process_query(final_input, file_context=text)
+                        doc_text = " ".join([p.text for p in doc.paragraphs])
+                    response = st.session_state.neuro_engine.process_query(final_input, file_context=doc_text)
             else:
                 response = st.session_state.neuro_engine.process_query(final_input)
             
             st.markdown(response)
             manage_db("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (st.session_state.user_email, st.session_state.current_session, "assistant", response, time.time()))
     
+    # Reset for next message
     st.session_state.reset_key += 1
     st.rerun()
