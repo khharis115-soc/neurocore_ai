@@ -6,55 +6,48 @@ from langchain.agents import initialize_agent, AgentType
 from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
 from langchain_community.utilities import WikipediaAPIWrapper
 from langchain.memory import ConversationBufferMemory
-from groq import Groq # Direct Groq Client for Vision
+from groq import Groq
 
 class NeuroCoreEngine:
     def __init__(self, api_key):
         self.api_key = api_key
-        # Direct Groq client setup for Vision
         self.client = Groq(api_key=api_key)
         
-        # Text Model for Search (Llama 3.3)
+        # Main Model (Text & Search)
         self.text_llm = ChatGroq(
             temperature=0.3, 
             groq_api_key=api_key, 
             model_name="llama-3.3-70b-versatile"
         )
         
-        # Tools & Memory
         self.search = DuckDuckGoSearchRun()
         self.wiki = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
         self.tools = [self.search, self.wiki]
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-    # Naya Function: Image ko samajhne ke liye
     def process_image(self, image_data, prompt):
         try:
-            # Convert image to base64
             buffered = BytesIO()
             image_data.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
-            # Using Llama 3.2 Vision Model
             completion = self.client.chat.completions.create(
                 model="llama-3.2-11b-vision-preview",
                 messages=[
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": f"System: Analysis required. Prompt: {prompt}"},
+                            {"type": "text", "text": prompt},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}
                         ]
                     }
                 ],
-                temperature=0.5,
-                max_tokens=1024,
+                temperature=0.5
             )
             return completion.choices[0].message.content
         except Exception as e:
-            return f"Error in Vision Core: {str(e)}"
+            return f"Vision Error: {str(e)}"
 
-    # Purana Function (sirf text ke liye)
     def process_query(self, user_input):
         try:
             agent = initialize_agent(
@@ -65,7 +58,6 @@ class NeuroCoreEngine:
                 memory=self.memory,
                 handle_parsing_errors=True
             )
-            response = agent.run(input=f"System: You are NEURO-CORE. Answer this: {user_input}")
-            return response
+            return agent.run(input=f"System: You are NEURO-CORE. {user_input}")
         except Exception as e:
-            return f"Error in Text Core: {str(e)}"
+            return f"Text Error: {str(e)}"
