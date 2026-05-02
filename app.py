@@ -4,7 +4,7 @@ from PIL import Image
 from streamlit_mic_recorder import mic_recorder
 import sqlite3
 
-# --- DATABASE SETUP ---
+# --- DATABASE SETUP (Email based history) ---
 def init_db():
     conn = sqlite3.connect('neuro_history.db')
     c = conn.cursor()
@@ -33,24 +33,26 @@ init_db()
 # Page Config
 st.set_page_config(page_title="HARIS NEURO-CORE", page_icon="🧠", layout="wide")
 
-# --- LOGIN LOGIC ---
+# --- GOOGLE-STYLE AUTHENTICATION ---
 if "authenticated" not in st.session_state:
-    st.title("🧠 HARIS NEURO-CORE")
-    st.subheader("🔐 Login to Access Your Saved History")
+    st.markdown("<h1 style='text-align: center;'>🧠 HARIS NEURO-CORE</h1>", unsafe_allow_html=True)
+    st.write("---")
+    col1, col2, col3 = st.columns([1,2,1])
     
-    email_input = st.text_input("Enter Email")
-    user_input_name = st.text_input("Username")
-    pas_input = st.text_input("Password", type="password")
-    
-    if st.button("Access Neural Core"):
-        if user_input_name == "haris" and pas_input == "neuro2026" and "@" in email_input:
-            st.session_state["authenticated"] = True
-            st.session_state["user_email"] = email_input
-            # Load specific history for this email
-            st.session_state["messages"] = load_chat(email_input)
-            st.rerun()
-        else:
-            st.error("Invalid Credentials or Email Format")
+    with col2:
+        st.subheader("Welcome Back")
+        email_input = st.text_input("Enter your Google Email to continue")
+        
+        # UI Button that looks like 'Continue with Google'
+        if st.button("🌐 Continue with Google"):
+            if "@" in email_input:
+                st.session_state["authenticated"] = True
+                st.session_state["user_email"] = email_input
+                st.session_state["messages"] = load_chat(email_input)
+                st.success(f"Signed in as {email_input}")
+                st.rerun()
+            else:
+                st.error("Please enter a valid email address.")
     st.stop()
 
 # Brain Setup
@@ -61,36 +63,36 @@ if "neuro_engine" not in st.session_state:
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("🛡️ NEURO-LAB")
-    st.write(f"User: `{st.session_state.user_email}`")
-    if st.button("Logout"):
-        del st.session_state["authenticated"]
+    st.write(f"Account: `{st.session_state.user_email}`")
+    if st.button("Sign Out"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
     
     st.divider()
-    st.subheader("🎤 Voice")
-    audio = mic_recorder(start_prompt="Speak", stop_prompt="Stop", key="voice_mic")
+    st.subheader("🎤 Voice Control")
+    audio = mic_recorder(start_prompt="Tap to Speak", stop_prompt="Stop", key="voice_mic")
     
     st.divider()
     uploaded_file = st.file_uploader("Upload Image", type=['png', 'jpg', 'jpeg'], key="file_up")
-    camera_photo = st.camera_input("Sensor", key="neuro_cam")
+    camera_photo = st.camera_input("Visual Sensor", key="neuro_cam")
 
-# --- MAIN CHAT ---
+# --- CHAT INTERFACE ---
 st.header("🧠 HARIS NEURO-CORE")
 
-# Display History from Database
+# Display History from DB
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Handle Input
+# Handling Input
 prompt = None
 if audio and audio['text']:
     prompt = audio['text']
-elif input_text := st.chat_input("Message HARIS NEURO-CORE..."):
+elif input_text := st.chat_input("How can I help you today?"):
     prompt = input_text
 
 if prompt:
-    # Save & Display User Message
     st.session_state.messages.append({"role": "user", "content": prompt})
     save_chat(st.session_state.user_email, "user", prompt)
     with st.chat_message("user"):
@@ -109,6 +111,5 @@ if prompt:
             
         st.markdown(response)
         
-        # Save Assistant Message to DB
         st.session_state.messages.append({"role": "assistant", "content": response})
         save_chat(st.session_state.user_email, "assistant", response)
