@@ -5,4 +5,3 @@ langchain-community
 duckduckgo-search
 wikipedia
 arxiv
-pypdf
