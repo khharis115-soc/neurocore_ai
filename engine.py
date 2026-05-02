@@ -11,14 +11,7 @@ class NeuroCoreEngine:
     def __init__(self, api_key):
         self.api_key = api_key
         self.client = Groq(api_key=api_key)
-        
-        # Text/Search Model
-        self.text_llm = ChatGroq(
-            temperature=0.3, 
-            groq_api_key=api_key, 
-            model_name="llama-3.3-70b-versatile"
-        )
-        
+        self.text_llm = ChatGroq(temperature=0.3, groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
         self.search = DuckDuckGoSearchRun()
         self.wiki = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
         self.tools = [self.search, self.wiki]
@@ -30,37 +23,19 @@ class NeuroCoreEngine:
             image_data.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
-            # Using the STABLE Vision Model on Groq
+            # STABLE MODEL: llama-3.2-11b-vision-preview
             completion = self.client.chat.completions.create(
-                model="llava-v1.5-7b-4096-preview", 
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{img_str}"
-                                }
-                            }
-                        ]
-                    }
-                ],
+                model="llama-3.2-11b-vision-preview",
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}]}],
                 temperature=0.5
             )
             return completion.choices[0].message.content
         except Exception as e:
-            # Ye line aapko browser par exact error dikhayegi agar ab bhi masla hua
             return f"Neural Vision Error: {str(e)}"
 
     def process_query(self, user_input):
         try:
-            agent = initialize_agent(
-                self.tools, self.text_llm, 
-                agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, 
-                verbose=True, memory=self.memory, handle_parsing_errors=True
-            )
+            agent = initialize_agent(self.tools, self.text_llm, agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, verbose=True, memory=self.memory, handle_parsing_errors=True)
             return agent.run(input=f"System: You are HARIS NEURO-CORE. {user_input}")
         except Exception as e:
             return f"Neural Error: {str(e)}"
