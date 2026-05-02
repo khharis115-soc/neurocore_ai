@@ -40,7 +40,6 @@ def get_all_sessions(email):
 
 init_db()
 
-# Page Config
 st.set_page_config(page_title="HARIS NEURO-CORE", page_icon="🧠", layout="wide")
 
 # --- LOGIN ---
@@ -48,41 +47,43 @@ if "authenticated" not in st.session_state:
     st.markdown("<h1 style='text-align: center;'>🧠 HARIS NEURO-CORE</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        email_input = st.text_input("Enter Email")
+        email_input = st.text_input("Enter Email Address")
         if st.button("🌐 Continue with Google"):
             if "@" in email_input:
                 st.session_state["authenticated"] = True
                 st.session_state["user_email"] = email_input
-                # Default session for new login
                 st.session_state["current_session"] = f"Chat_{int(time.time())}"
                 st.rerun()
     st.stop()
 
 # Engine Setup
+# PRO TIP: Repo private hai toh ab aap st.secrets["GROQ_KEY"] bhi use kar sakte hain
 groq_key = "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"
 if "neuro_engine" not in st.session_state:
     st.session_state.neuro_engine = NeuroCoreEngine(api_key=groq_key)
 
-# --- SIDEBAR (HISTORY & NEW CHAT) ---
+# --- SIDEBAR (HISTORY + LAB TOOLS) ---
 with st.sidebar:
     st.title("🧠 HARIS NEURO-CORE")
     
-    # 1. NEW CHAT BUTTON
+    # 1. New Chat Button
     if st.button("➕ New Chat", use_container_width=True):
         st.session_state["current_session"] = f"Chat_{int(time.time())}"
         st.rerun()
     
     st.divider()
+
+    # 2. LAB TOOLS (Camera & Upload) - Inko wapas add kar diya
+    st.subheader("🛠️ NEURO-LAB")
+    uploaded_file = st.file_uploader("Upload Image/Log", type=['png', 'jpg', 'jpeg'], key="file_up")
+    camera_photo = st.camera_input("Visual Sensor", key="cam_sensor")
     
-    # 2. SIDEBAR HISTORY LINKS
+    st.divider()
+
+    # 3. Recent History
     st.subheader("Recent Chats")
     past_sessions = get_all_sessions(st.session_state.user_email)
-    
-    if not past_sessions:
-        st.info("No history yet.")
-    
     for s_id in past_sessions:
-        # Har purani chat ka link yahan banega
         if st.button(f"💬 {s_id}", key=f"btn_{s_id}", use_container_width=True):
             st.session_state["current_session"] = s_id
             st.rerun()
@@ -92,43 +93,42 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# --- MAIN CHAT AREA ---
+# --- MAIN INTERFACE ---
 st.header("🧠 Neural Interface")
-st.caption(f"Logged in: {st.session_state.user_email} | Session: {st.session_state.current_session}")
+st.caption(f"User: {st.session_state.user_email} | Session: {st.session_state.current_session}")
 
-# Load current session messages
+# Display Session Messages
 current_messages = load_session_history(st.session_state.user_email, st.session_state.current_session)
-
-# Display history
 for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Input Logic
-audio = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="voice")
+# Input handling
+audio = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="voice_input")
 user_query = st.chat_input("Ask HARIS NEURO-CORE...")
 
-prompt = None
-if audio and audio['text']:
-    prompt = audio['text']
-elif user_query:
-    prompt = user_query
+prompt = audio['text'] if audio and audio['text'] else user_query
 
 if prompt:
-    # Display & Save User Input
+    # Save & Display User Message
     with st.chat_message("user"):
         st.markdown(prompt)
     save_to_db(st.session_state.user_email, st.session_state.current_session, "user", prompt)
     
     with st.chat_message("assistant"):
-        # Image Processing (optional in sidebar)
-        camera_photo = st.sidebar.camera_input("Visual Sensor", key="cam_sensor")
-        if camera_photo:
-            img = Image.open(camera_photo)
-            response = st.session_state.neuro_engine.process_image(img, prompt)
-        else:
-            response = st.session_state.neuro_engine.process_query(prompt)
-        
-        st.markdown(response)
-        # Save Assistant Response
-        save_to_db(st.session_state.user_email, st.session_state.current_session, "assistant", response)
+        with st.spinner("Analyzing Neural Pathways..."):
+            # Check for visuals from Sidebar
+            img = None
+            if camera_photo:
+                img = Image.open(camera_photo)
+            elif uploaded_file:
+                img = Image.open(uploaded_file)
+
+            if img:
+                st.image(img, caption="Input Data", width=300)
+                response = st.session_state.neuro_engine.process_image(img, prompt)
+            else:
+                response = st.session_state.neuro_engine.process_query(prompt)
+            
+            st.markdown(response)
+            save_to_db(st.session_state.user_email, st.session_state.current_session, "assistant", response)
