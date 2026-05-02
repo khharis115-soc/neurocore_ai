@@ -1,34 +1,65 @@
 import os
+import base64
+from io import BytesIO
 from langchain_groq import ChatGroq
 from langchain.agents import initialize_agent, AgentType
 from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
 from langchain_community.utilities import WikipediaAPIWrapper
 from langchain.memory import ConversationBufferMemory
+from groq import Groq # Direct Groq Client for Vision
 
 class NeuroCoreEngine:
     def __init__(self, api_key):
-        # Naya model "llama-3.3-70b-versatile" use kar rahe hain
-        self.llm = ChatGroq(
+        self.api_key = api_key
+        # Direct Groq client setup for Vision
+        self.client = Groq(api_key=api_key)
+        
+        # Text Model for Search (Llama 3.3)
+        self.text_llm = ChatGroq(
             temperature=0.3, 
             groq_api_key=api_key, 
             model_name="llama-3.3-70b-versatile"
         )
         
+        # Tools & Memory
         self.search = DuckDuckGoSearchRun()
         self.wiki = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
-        
         self.tools = [self.search, self.wiki]
-        
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history", 
-            return_messages=True
-        )
+        self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
+    # Naya Function: Image ko samajhne ke liye
+    def process_image(self, image_data, prompt):
+        try:
+            # Convert image to base64
+            buffered = BytesIO()
+            image_data.save(buffered, format="PNG")
+            img_str = base64.b64encode(buffered.getvalue()).decode()
+            
+            # Using Llama 3.2 Vision Model
+            completion = self.client.chat.completions.create(
+                model="llama-3.2-11b-vision-preview",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"System: Analysis required. Prompt: {prompt}"},
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}
+                        ]
+                    }
+                ],
+                temperature=0.5,
+                max_tokens=1024,
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            return f"Error in Vision Core: {str(e)}"
+
+    # Purana Function (sirf text ke liye)
     def process_query(self, user_input):
         try:
             agent = initialize_agent(
                 self.tools, 
-                self.llm, 
+                self.text_llm, 
                 agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, 
                 verbose=True, 
                 memory=self.memory,
@@ -37,4 +68,4 @@ class NeuroCoreEngine:
             response = agent.run(input=f"System: You are NEURO-CORE. Answer this: {user_input}")
             return response
         except Exception as e:
-            return f"Error in Engine: {str(e)}"
+            return f"Error in Text Core: {str(e)}"
