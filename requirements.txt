@@ -1,4 +1,4 @@
-langchain
+langchain==0.1.0
 langchain-groq
 langchain-community
 duckduckgo-search
