@@ -81,7 +81,7 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# --- CHAT ---
+# --- CHAT UI ---
 st.header("🧠 Neural Interface")
 messages = manage_db("SELECT role, content FROM messages WHERE email=? AND session_id=? ORDER BY timestamp", (st.session_state.user_email, st.session_state.current_session), True)
 for r, c in messages:
@@ -93,24 +93,28 @@ with st.container():
 
     col_mic, col_in = st.columns([1, 15])
     with col_mic:
-        # Mic recorder with unique key to prevent stuck state
         audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key=f"mic_{st.session_state.reset_key}")
     
     user_in = st.chat_input("Message HARIS NEURO-CORE...")
 
-prompt = audio['text'] if audio and audio['text'] else user_in
+# --- SAFE PROMPT LOGIC (FIX FOR KEYERROR) ---
+final_prompt = None
+if audio and isinstance(audio, dict) and audio.get('text'):
+    final_prompt = audio['text']
+elif user_in:
+    final_prompt = user_in
 
-if prompt:
+if final_prompt:
     with st.chat_message("user"):
-        st.markdown(prompt)
-    manage_db("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (st.session_state.user_email, st.session_state.current_session, "user", prompt, time.time()))
+        st.markdown(final_prompt)
+    manage_db("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (st.session_state.user_email, st.session_state.current_session, "user", final_prompt, time.time()))
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing..."):
             if up_file and up_file.type.startswith("image/"):
-                response = st.session_state.neuro_engine.process_image(Image.open(up_file), prompt)
+                response = st.session_state.neuro_engine.process_image(Image.open(up_file), final_prompt)
             else:
-                response = st.session_state.neuro_engine.process_query(prompt)
+                response = st.session_state.neuro_engine.process_query(final_prompt)
             st.markdown(response)
             manage_db("INSERT INTO messages VALUES (?, ?, ?, ?, ?)", (st.session_state.user_email, st.session_state.current_session, "assistant", response, time.time()))
     
