@@ -26,8 +26,10 @@ class NeuroCoreEngine:
             buffered = BytesIO()
             image_data.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
+            
+            # UPDATED MODEL NAME HERE: llama-3.2-90b-vision-preview
             completion = self.client.chat.completions.create(
-                model="llama-3.2-11b-vision-preview",
+                model="llama-3.2-90b-vision-preview",
                 messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}]}],
                 temperature=0.5
             )
