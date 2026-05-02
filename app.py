@@ -36,6 +36,14 @@ with st.sidebar:
         # Yahan hum future mein Vision processing add karenge
 
 # --- CHAT INTERFACE ---
+# ... [Oopar ka sara purana login/sidebar code wese hi rahega] ...
+
+# --- Sidebaer logic from previous step ---
+st.sidebar.title("📂 NEURO-CORE Lab")
+uploaded_file = st.sidebar.file_uploader("Upload Image", type=['png', 'jpg', 'jpeg'])
+camera_photo = st.sidebar.camera_input("Take a Snapshot")
+
+# --- CHAT INTERFACE ---
 st.title("🧠 NEURO-CORE Cloud")
 
 if "messages" not in st.session_state:
@@ -45,13 +53,28 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Ask me anything..."):
+# --- PROCESSING ---
+if prompt := st.chat_input("Ask about image or anything..."):
+    # Pehle message display karen
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        # Processing query
-        response = st.session_state.neuro_engine.process_query(prompt)
-        st.markdown(response)
+        with st.spinner("Analyzing..."):
+            image_to_process = None
+            if camera_photo:
+                image_to_process = Image.open(camera_photo)
+                st.image(image_to_process, caption="Analyzed Image", width=300)
+            elif uploaded_file:
+                image_to_process = Image.open(uploaded_file)
+                st.image(image_to_process, caption="Analyzed File", width=300)
+
+            # Vision aur Text ki smart switching
+            if image_to_process:
+                response = st.session_state.neuro_engine.process_image(image_to_process, prompt)
+            else:
+                response = st.session_state.neuro_engine.process_query(prompt)
+                
+            st.markdown(response)
     st.session_state.messages.append({"role": "assistant", "content": response})
