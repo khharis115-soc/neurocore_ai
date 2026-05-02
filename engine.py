@@ -33,7 +33,7 @@ class NeuroCoreEngine:
             )
             return completion.choices[0].message.content
         except Exception as e:
-            return f"Vision Sensor Error: {str(e)}"
+            return f"Vision Error: {str(e)}"
 
     def process_query(self, user_input):
         try:
@@ -42,6 +42,6 @@ class NeuroCoreEngine:
                 agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, 
                 verbose=True, memory=self.memory, handle_parsing_errors=True
             )
-            return agent.run(input=f"System: You are HARIS NEURO-CORE, a highly advanced AI. {user_input}")
+            return agent.run(input=f"System: You are HARIS NEURO-CORE. {user_input}")
         except Exception as e:
             return f"Neural Error: {str(e)}"
