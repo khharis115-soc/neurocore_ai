@@ -29,8 +29,7 @@ def manage_user(email, password, mode="login"):
             c.execute("INSERT INTO users VALUES (?, ?)", (email, hashed))
             conn.commit()
             return True, "Account created!"
-        except:
-            return False, "Email already exists!"
+        except: return False, "Email already exists!"
     else:
         c.execute("SELECT * FROM users WHERE email=? AND password=?", (email, hashed))
         return (True, "Logged in!") if c.fetchone() else (False, "Invalid credentials!")
@@ -50,14 +49,25 @@ def load_session_history(email, session_id):
     conn.close()
     return [{"role": r, "content": c} for r, c in data]
 
-init_db()
-st.set_page_config(page_title="HARIS NEURO-CORE", page_icon="🧠", layout="wide")
+def extract_doc_text(uploaded_file):
+    try:
+        if uploaded_file.type == "application/pdf":
+            reader = PyPDF2.PdfReader(uploaded_file)
+            return " ".join([page.extract_text() for page in reader.pages])
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = docx.Document(uploaded_file)
+            return " ".join([p.text for p in doc.paragraphs])
+        return str(uploaded_file.read(), "utf-8")
+    except: return "Error reading file."
 
-# --- AUTHENTICATION ---
+init_db()
+st.set_page_config(page_title="HARIS NEURO-CORE", layout="wide")
+
+# --- LOGIN SYSTEM ---
 if "authenticated" not in st.session_state:
-    st.markdown("<h1 style='text-align: center;'>🧠 HARIS NEURO-CORE</h1>", unsafe_allow_html=True)
-    tab1, tab2 = st.tabs(["Login", "Sign Up"])
-    with tab1:
+    st.title("🧠 HARIS NEURO-CORE")
+    t1, t2 = st.tabs(["Login", "Sign Up"])
+    with t1:
         e_l = st.text_input("Email", key="l_e")
         p_l = st.text_input("Password", type="password", key="l_p")
         if st.button("Login"):
@@ -66,60 +76,69 @@ if "authenticated" not in st.session_state:
                 st.session_state.update({"authenticated": True, "user_email": e_l, "current_session": f"Chat_{int(time.time())}"})
                 st.rerun()
             else: st.error(msg)
-    with tab2:
+    with t2:
         e_s = st.text_input("Email", key="s_e")
         p_s = st.text_input("Create Password", type="password", key="s_p")
         if st.button("Sign Up"):
-            if "@" in e_s and len(p_s) > 5:
+            if "@" in e_s:
                 success, msg = manage_user(e_s, p_s, "signup")
                 if success: st.success(msg)
                 else: st.error(msg)
     st.stop()
 
-# --- ENGINE & SIDEBAR ---
+# --- ENGINE ---
 groq_key = "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"
 if "neuro_engine" not in st.session_state:
     st.session_state.neuro_engine = NeuroCoreEngine(api_key=groq_key)
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.title("🧠 NEURO-CORE")
     if st.button("➕ New Chat", use_container_width=True):
         st.session_state.current_session = f"Chat_{int(time.time())}"
         st.rerun()
-    st.divider()
-    if st.button("Sign Out"):
+    if st.button("Logout"):
         st.session_state.clear()
         st.rerun()
 
 # --- MAIN CHAT ---
 st.header("🧠 Neural Interface")
-for m in load_session_history(st.session_state.user_email, st.session_state.current_session):
+history = load_session_history(st.session_state.user_email, st.session_state.current_session)
+for m in history:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-with st.container():
-    with st.expander("➕ Add Multimedia (Image/Doc/Camera)"):
-        col_f, col_c = st.columns(2)
-        uploaded_file = col_f.file_uploader("Upload", type=['png','jpg','jpeg','pdf','docx'])
-        camera_photo = col_c.camera_input("Visual Sensor")
+# Plus Button Expander (Gemini Style)
+with st.expander("➕ Attach Multimedia / Take Photo"):
+    col1, col2 = st.columns(2)
+    up_file = col1.file_uploader("Upload File/Image", type=['png','jpg','jpeg','pdf','docx'], key="file_input")
+    cam_file = col2.camera_input("Visual Sensor", key="cam_input")
 
-    col_mic, col_in = st.columns([1, 15])
-    with col_mic: audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="mic")
-    user_query = st.chat_input("Ask Haris Neuro-Core...")
+# Input Bar
+col_m, col_i = st.columns([1, 15])
+with col_m: audio = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="voice")
+user_in = st.chat_input("Ask Haris Neuro-Core...")
 
-prompt = audio['text'] if audio and audio['text'] else user_query
+prompt = audio['text'] if audio and audio['text'] else user_in
 
 if prompt:
-    with st.chat_message("user"): st.markdown(prompt)
+    # Handle File & Camera Logic
+    file_payload = cam_file if cam_file else up_file
+    
+    with st.chat_message("user"):
+        st.markdown(prompt)
+        if file_payload: st.caption(f"Attached: {file_payload.name}")
     save_to_db(st.session_state.user_email, st.session_state.current_session, "user", prompt)
+
     with st.chat_message("assistant"):
-        img = None
-        if camera_photo: img = Image.open(camera_photo)
-        elif uploaded_file and uploaded_file.type.startswith("image/"): img = Image.open(uploaded_file)
-        
-        if img:
-            st.image(img, width=250)
-            response = st.session_state.neuro_engine.process_image(img, prompt)
-        else:
-            response = st.session_state.neuro_engine.process_query(prompt)
-        st.markdown(response)
-        save_to_db(st.session_state.user_email, st.session_state.current_session, "assistant", response)
+        with st.spinner("Processing..."):
+            if file_payload and file_payload.type.startswith("image/"):
+                img = Image.open(file_payload)
+                response = st.session_state.neuro_engine.process_image(img, prompt)
+            elif file_payload: # Document
+                doc_text = extract_doc_text(file_payload)
+                response = st.session_state.neuro_engine.process_query(f"Context: {doc_text[:3000]}\n\nUser: {prompt}")
+            else:
+                response = st.session_state.neuro_engine.process_query(prompt)
+            
+            st.markdown(response)
+            save_to_db(st.session_state.user_email, st.session_state.current_session, "assistant", response)
