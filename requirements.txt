@@ -5,5 +5,3 @@ duckduckgo-search
 wikipedia
 Pillow
 streamlit-mic-recorder
-gspread
-oauth2client
