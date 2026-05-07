@@ -20,21 +20,17 @@ class NeuroCoreEngine:
                 completion = self.client.chat.completions.create(
                     model=model_id,
                     messages=[{"role": "user", "content": [
-                        {"type": "text", "text": f"User Prompt: {prompt if prompt else 'Analyze this image in detail.'}"},
+                        {"type": "text", "text": f"Context: Haris Neuro-Core Vision. Task: {prompt if prompt else 'Explain image'}"},
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_str}"}}
                     ]}]
                 )
                 return completion.choices[0].message.content
             except: continue
-        return "Neural Vision Error: Vision models are currently busy. Please try again."
+        return "Vision Error: Models are currently overloaded."
 
     def process_query(self, user_input, file_context=None):
         try:
-            if file_context:
-                full_prompt = f"Context from uploaded file: {file_context}\n\nUser Question: {user_input}"
-            else:
-                full_prompt = user_input
-            
-            return self.text_llm.invoke(f"System: You are HARIS NEURO-CORE, a professional AI. Answer the following: {full_prompt}").content
+            prompt = f"System: You are HARIS NEURO-CORE. Context: {file_context if file_context else 'None'}. User: {user_input}"
+            return self.text_llm.invoke(prompt).content
         except Exception as e:
             return f"Neural Error: {str(e)}"
