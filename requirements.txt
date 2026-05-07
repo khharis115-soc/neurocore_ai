@@ -5,4 +5,3 @@ Pillow
 streamlit-mic-recorder
 PyPDF2
 python-docx
-weasyprint
