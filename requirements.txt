@@ -1,9 +1,8 @@
 langchain==0.1.0
 langchain-groq
 langchain-community
-duckduckgo-search
-wikipedia
 Pillow
 streamlit-mic-recorder
 PyPDF2
 python-docx
+weasyprint
