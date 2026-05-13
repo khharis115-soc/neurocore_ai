@@ -1,7 +1,7 @@
-langchain==0.1.0
-langchain-groq
-langchain-community
-Pillow
-streamlit-mic-recorder
+streamlit
+langchain_groq
+groq
+duckduckgo-search
 PyPDF2
 python-docx
+pillow
